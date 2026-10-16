@@ -55,10 +55,9 @@ happened; these entries are the toolkit's own timeline.
 All four entries are graded. Keep every heading below, and fill each
 one in the week it belongs to.
 
-**Unit 5: [one line on the tool work]**
+**Unit 5: Built the issue-scout: a Python/CSV-JSON search strategy and a five-check rubric**
 
-[2-4 sentences: what you built (the scout, your strategy), what broke
-or fell short, what changed because of it.]
+I wrote a gh search query for Python bugs touching CSV/JSON, three ranking filters (fewest comments, most recent, no assignee), and a rubric that gates on maintainer activity, repo in use, scope, existing claims and AI policy. The first scan fell short: my query had an HTML-escaped `&lt;10` and no `--json` fields, and without a recency limit three of the top five were in repos dead for 180+ days, so I fixed the query and added an `--updated` cutoff. The scout accepted one issue (usyd-cs14-1#21) and rejected all three of my hand-picked issues; the rubric couldn't tell a seven-year-old abandoned claim from a live one, and I haven't yet decided whether it should.
 
 **Unit 6: [one line on the tool work]**
 
