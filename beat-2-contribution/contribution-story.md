@@ -93,26 +93,26 @@ The ambitious flag is real. When I checked, trunk's `package-lock.json` resolves
 
 **Problem Description**
 
-[In your own words, what is broken or missing?]
+The issue says Gutenberg's `package-lock.json` resolved several different versions of `caniuse-lite` at once, so tools that read its browser data (browserslist, autoprefixer) could disagree between packages, and the data was not being updated on any routine. At the commit the issue cites (`bc1c260`) the lockfile has four versions.
 
 **Expected Behavior**
 
-[What should happen?]
+The lockfile resolves one `caniuse-lite` version, and something in the repo notices if a second one appears.
 
 **Current Behavior**
 
-[What actually happens?]
+On `trunk` (`44d6ae9ff9`) the lockfile resolves exactly one version (1.0.30001810), so the duplication from the report is gone. Nothing stops it coming back: the only lockfile check does not count duplicate packages. A maintainer said in 2025 the issue could be closed; another commenter disagreed, because differing versions make CSS builds unreliable.
 
 **Affected Components**
 
-[Which parts of the codebase are involved?]
+`package-lock.json`, `tools/validation/validate-package-lock.cjs` (run by `npm run lint:lockfile`), and the Static checks workflow `.github/workflows/static-checks.yml` that runs it.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: `gh issue view` to read the thread, plus my `count.py` lockfile counter from the reproduction, and my `CLAUDE.local.md` repo notes.
+- What it produced: the answers above, including that trunk has one version and that the thread has no maintainer reply since my claim on 2026-10-23.
+- Difficulties: the issue title says "update and de-duplicate", but trunk shows only half of it is still open, so the four answers needed a judgment call about what "expected" means.
+- What changed: I wrote the answers around the guard question I put to the maintainers instead of around the 2021 duplication.
 
 ---
 
@@ -174,29 +174,35 @@ trunk   lockfileVersion 3 {'1.0.30001810': 1}
 
 **Analysis**
 
-[Your analysis of the root cause: what is causing the issue, traced
-to the files and functions involved.]
+Issue #33344 reports that `package-lock.json` resolved four different `caniuse-lite` versions at `bc1c260` / `wp/5.7` (1.0.30001148, 1.0.30001165, 1.0.30000998, 1.0.30001168), so tools that read `caniuse-lite` (browserslist, autoprefixer) could disagree between packages. My repro (see Reproduction Process) shows that is gone: `wp/6.0` to `wp/6.9` and `trunk` (`44d6ae9ff9`) each resolve exactly one version, and `package-lock.json` on trunk has a single `node_modules/caniuse-lite` entry (1.0.30001810).
+
+What I can show is that nothing in the repo constrains it; why the four versions appeared in 2021 I have not confirmed. Likely, `caniuse-lite` is a transitive dependency of many packages, each with its own semver range, and npm keeps one copy only when one version satisfies every range, but I have not traced which packages pulled in each of the four versions at `bc1c260`. Nothing refreshes the data on a schedule either: there is no browserslist update step in `package.json` or `.github/workflows` (WordPress core runs `browserslist:update` in wordpress-develop, not here). The only lockfile check, `tools/validation/validate-package-lock.cjs` (run by `npm run lint:lockfile` and `.github/workflows/static-checks.yml`), rejects `"resolved": false` and does not look at duplicate packages. So today's single version is where the lockfile happens to sit, not something the repo enforces.
 
 **Proposed Solution**
 
-[High-level description of your fix approach, and what you are
-deliberately NOT changing.]
+Only if a maintainer confirms a guard is wanted: extend `tools/validation/validate-package-lock.cjs` so `npm run lint:lockfile` also fails when `caniuse-lite` resolves to more than one version. It walks the same entries it already walks, collects the `version` of every package whose name is `caniuse-lite`, and exits 1 with a message naming the versions and the paths that pulled them in, plus the fix (run `npx update-browserslist-db@latest`, then dedupe). To make it testable, the script takes an optional lockfile path argument and defaults to the repo's `package-lock.json`.
+
+What I will not change: `package-lock.json` itself (there is nothing to fix on trunk), the other validators, the CI workflow files (the check already runs in `static-checks.yml` through `lint:lockfile`), a scheduled data-update job, or duplicate checks for any package other than `caniuse-lite`. If a maintainer says the issue is done, or wants something different, I stop and re-plan instead of building this.
 
 **Implementation Plan**
 
-1. [Modify file X to do Y]
-2. [Add or change Z]
-3. [Update tests]
+1. Wait for a maintainer answer to my claim comment's question. Build nothing until I have one. If there is still no answer when I'm ready to build, I ask once more and say what I'll do by when.
+2. In `tools/validation/validate-package-lock.cjs`, read an optional path from `process.argv[2]`, defaulting to `../../package-lock.json`. Behavior with no argument stays identical.
+3. Add the duplicate check: gather `caniuse-lite` versions from the entries already iterated (both `packages` keys ending in `node_modules/caniuse-lite` and nested ones), and if there is more than one distinct version print each version with its lockfile path and exit 1.
+4. Add `tools/validation/validate-package-lock.test.js`, modeled on `validate-tsconfig.test.js`: write temporary lockfiles and run the script with them. Cases: one version passes, two versions fail with both named, the existing `"resolved": false` case still fails.
+5. Run the checks in my ship manifest (`npm install`, `npm run lint:lockfile`, `npm run lint:js`, `npm run typecheck`) plus the new test, confirm `npm run lint:lockfile` still passes on the real lockfile, and re-run my `count.py` repro on a branch that has duplicates as the before/after.
+6. Open the PR with `Closes #33344` only if the maintainer agrees that closes it, and disclose the AI tooling in the PR description.
 
-[Record deviations here as they happen: what changed mid-build and
-why. A recorded deviation is honest work; silent drift is not.]
+**Test plan**
+
+The diagnosis is that the current check cannot see duplicates, so the test is a lockfile with two `caniuse-lite` versions. Before the change, `node tools/validation/validate-package-lock.cjs <fixture-with-two-versions>` exits 0 (I will run it first and record that). After the change it must exit 1 and print both versions; if it still exits 0, the guard doesn't look where the duplicates are and the plan is wrong. The same test file asserts a one-version lockfile exits 0 and the `"resolved": false` case still exits 1. Then `npm run lint:lockfile` on the real trunk lockfile must still pass, and my `count.py` repro on `bc1c260` (four versions) must now make the script fail.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: plan-check, with my rubric (Diagnosis, Scope, Test), procedure and voice guide, run on `plan.md` and a draft `plan-comment.md`.
+- What it produced: accept, with Diagnosis, Scope and Test all pass: the cause (no check counts duplicates) matches my repro, only `validate-package-lock.cjs` and a test next to it change, and the test plan uses a two-version lockfile that exits 0 before and must exit 1 after.
+- Difficulties: the headless `claude -p` run could not read the skill folder without a permission prompt, so I ran the skill inside an interactive session. Before grading I fixed two things against my voice guide's "no certainty I haven't earned" rule: the first draft stated why the duplicates appeared as fact, though my repro never traced it, and it had no test plan. The comment still says the two-version fixture "exits 0 today" before I've run it.
+- What changed: the plan now marks the cause of the 2021 duplication as likely and untraced and has a Test plan section, and I dropped an optional docs-note step. The comment is not posted; the plan is conditional on a maintainer answer.
 
 ---
 
