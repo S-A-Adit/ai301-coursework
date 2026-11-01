@@ -11,7 +11,7 @@ files and no evidence uploads are part of Assignment 5.
 **Student:** Syed Afnan Adit
 **GitHub Username:** S-A-Adit
 **Issue:** https://github.com/WordPress/gutenberg/issues/33344
-**Pull Request:** [GitHub PR link, once opened]
+**Pull Request:** https://github.com/WordPress/gutenberg/pull/86097
 
 One repository, built across units 5 to 8, telling the whole story of your real
 contribution. Fill it as you work, not at the end — the sections below ask for evidence that
@@ -62,10 +62,9 @@ I wrote a gh search query for Python bugs touching CSV/JSON, three ranking filte
 
 I extended my voice guide with upstream rules for claims, questions and pings, installed the guard and its hook, and wrote `CLAUDE.local.md` in my Gutenberg fork clone (kept out of the diff with `.git/info/exclude`). Three things broke on Windows: `ln -s` doesn't link, so the three skills got a one-line pointer to the canonical guide; `python3` is only a Store stub, so the hook runs `python`; and `check_voice.py` couldn't launch `claude` because it's a `.cmd` shim, which I fixed with `shutil.which`. The wiring test never fired the hook under headless `claude -p`, but in a normal interactive session it stopped `gh issue comment --help` with "no body the guard can read", which is the pass. The guard passed my claim draft, but I posted it from my own terminal, so the hook never saw that post, and I'll post through Claude Code from now on.
 
-**Unit 7: [one line on the tool work]**
+**Unit 7: Installed the ship-gate and wrote a four-check gate manifest for Gutenberg**
 
-[2-4 sentences: the ship-gate and your gate manifest. What it produced
-on your real branch, what fought you, what changed because of it.]
+The manifest runs `npm install`, `npm run lint:lockfile`, `npm run lint:js` on my two changed files, and `npm run typecheck`, taken from AGENTS.md and `static-checks.yml`; the whole-repo `lint:js` went in the excluded table because it never finished here. On my branch the gate ended in `ship-gate: PASS` on the third run, with pr-precheck passing all seven checks, and its voice-guide notes made me tighten two claims in the PR text. Four things fought me: the installer wrote the hook as `python3`, which is only a Store stub on this machine, so the hook could never have stopped anything until I changed it to `python`; `check_gate.py` called `claude` directly and couldn't launch the `.cmd` shim until I used `shutil.which`; Gutenberg needs Node 24.18 and the machine had 22.17, so I ran a portable Node 24.20; and the whole-repo lint ran past the gate's per-check limit, so I switched the row to the project's own `npm run lint:js <file>` form.
 
 **Unit 8: [one line on the tool work]**
 
@@ -189,13 +188,20 @@ What I will not change: `package-lock.json` itself (there is nothing to fix on t
 1. Wait for a maintainer answer to my claim comment's question. Build nothing until I have one. If there is still no answer when I'm ready to build, I ask once more and say what I'll do by when.
 2. In `tools/validation/validate-package-lock.cjs`, read an optional path from `process.argv[2]`, defaulting to `../../package-lock.json`. Behavior with no argument stays identical.
 3. Add the duplicate check: gather `caniuse-lite` versions from the entries already iterated (both `packages` keys ending in `node_modules/caniuse-lite` and nested ones), and if there is more than one distinct version print each version with its lockfile path and exit 1.
-4. Add `tools/validation/validate-package-lock.test.js`, modeled on `validate-tsconfig.test.js`: write temporary lockfiles and run the script with them. Cases: one version passes, two versions fail with both named, the existing `"resolved": false` case still fails.
-5. Run the checks in my ship manifest (`npm install`, `npm run lint:lockfile`, `npm run lint:js`, `npm run typecheck`) plus the new test, confirm `npm run lint:lockfile` still passes on the real lockfile, and re-run my `count.py` repro on a branch that has duplicates as the before/after.
+4. Add `tools/validation/validate-package-lock.test.ts`, modeled on `validate-tsconfig.test.js` (it is `.ts` because the repo's lint rule requires new files in that package to be TypeScript): write temporary lockfiles and run the script with them. Cases: one version passes, two versions fail with both named, the existing `"resolved": false` case still fails.
+5. Run the checks in my ship manifest (`npm install`, `npm run lint:lockfile`, `npm run lint:js`, `npm run typecheck`) plus the new test, confirm `npm run lint:lockfile` still passes on the real lockfile, and re-run my `count.py` repro, plus the validator before and after on a copy of the trunk lockfile with one extra `caniuse-lite`, as the before/after.
 6. Open the PR with `Closes #33344` only if the maintainer agrees that closes it, and disclose the AI tooling in the PR description.
 
 **Test plan**
 
-The diagnosis is that the current check cannot see duplicates, so the test is a lockfile with two `caniuse-lite` versions. Before the change, `node tools/validation/validate-package-lock.cjs <fixture-with-two-versions>` exits 0 (I will run it first and record that). After the change it must exit 1 and print both versions; if it still exits 0, the guard doesn't look where the duplicates are and the plan is wrong. The same test file asserts a one-version lockfile exits 0 and the `"resolved": false` case still exits 1. Then `npm run lint:lockfile` on the real trunk lockfile must still pass, and my `count.py` repro on `bc1c260` (four versions) must now make the script fail.
+The diagnosis is that the current check cannot see duplicates, so the test is a lockfile with two `caniuse-lite` versions. Before the change, `node tools/validation/validate-package-lock.cjs <fixture-with-two-versions>` exits 0 (I will run it first and record that). After the change it must exit 1 and print both versions; if it still exits 0, the guard doesn't look where the duplicates are and the plan is wrong. The same test file asserts a one-version lockfile exits 0 and the `"resolved": false` case still exits 1. Then `npm run lint:lockfile` on the real trunk lockfile must still pass, and the validator must fail on a copy of the real trunk lockfile with one extra `caniuse-lite` added (a version 3 lockfile, like the repo's).
+
+**Deviations**
+
+- 2026-10-31: I started building before a maintainer answered my claim comment (step 1 said to wait). The thread had no reply since 2026-10-23. The work is on a local branch only; nothing is posted, and I will say this in the PR description.
+- 2026-10-31: The plan's before/after on `bc1c260` does not work. That commit's lockfile is version 1 and has no `packages` key, so the validator crashes on it (exit 1, `Object.entries` of undefined) before and after any change. I use a version 3 copy of the trunk lockfile with one extra `caniuse-lite` instead. I did not add version 1 support: it is outside the diagnosed cause.
+- 2026-10-31: My first version of the check failed on the real trunk lockfile. The script's loop also walks each package's `dependencies` field, which in a version 3 lockfile maps names to range strings such as `^1.0.30001702`, so `caniuse-lite` showed up with an undefined version. The check now counts only entries with a string `version`, and the test file has a case for it.
+- 2026-10-31: The test file is `.ts`, not `.js` (see step 4).
 
 **Toolkit**
 
@@ -208,17 +214,18 @@ The diagnosis is that the current check cannot see duplicates, so the test is a 
 
 ## Testing Strategy
 
-[What observable checks prove the fix: your reproduction steps re-run
-against the built change (before and after), and the repo's own test
-suite or checks with the outcome shown. "Tests pass" with nothing
-observable named is not a strategy.]
+The diagnosis is that the repo's lockfile check cannot see a second `caniuse-lite`, so every check shows that change.
+
+- **New test, `tools/validation/validate-package-lock.test.ts`, 5 tests.** Without the change, the test that gives the validator a lockfile with two versions failed (`expected +0 to be 1`) and the other three then in the file passed. With it, all 5 pass. One of them covers a bug my first version had: a package's `dependencies` field maps names to ranges like `^1.0.30001702`, which made `caniuse-lite` show up with an undefined version on the real lockfile.
+- **Reproduction before and after.** On a copy of the trunk lockfile with one extra `caniuse-lite`, the validator without the change exits 0; with it, exit 1, listing `1.0.30001810` and `1.0.30001148` with their paths. On the real trunk lockfile it still exits 0. The issue's own commit (`bc1c260`) is a version 1 lockfile that the validator can't read at all (it crashed before and after), so it isn't the before/after case; `count.py` still shows its four versions.
+- **Repo checks.** `npm run lint:lockfile` exit 0; `npm run typecheck` exit 0; `npm run lint:js` on the two changed files exit 0 with one warning on an unchanged trunk line. I did not get a result for whole-repo `lint:js`, and I did not run the build, the full unit suite or the end-to-end tests. The outputs are in `test_evidence.md`, which stays on my machine; the PR description quotes them.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: vitest (the repo's `test:unit:vitest`), my `count.py` lockfile counter, and the validator run before and after on a trunk lockfile copy with a duplicate.
+- What it produced: a test that failed without the change and passed with it, and an exit 0 versus exit 1 pair on the same file.
+- Difficulties: the repo needs Node 24.18 and the machine had 22.17, so nothing ran until I set up a portable Node 24.20; the version 1 lockfile at the issue's commit made the plan's before/after impossible; and my first version of the check failed on the real lockfile, which my fixtures hadn't caught.
+- What changed: I switched the before/after to a version 3 copy with a duplicate, added the test for range strings in `dependencies`, and moved the whole-repo lint to the excluded table.
 
 ---
 
@@ -227,46 +234,49 @@ observable named is not a strategy.]
 [A running log, added to as you work. Date each entry. What you
 built, decisions you made when you made them, wrong turns included.]
 
-**[Date]**
+**2026-10-31**
 
-[Entry]
+Made branch `add/caniuse-lite-duplicate-check` (the repo's `[type]/[change]` naming). I started building even though the maintainer had not answered my claim comment, which my plan said to wait for; I recorded that in `plan.md` and the PR says so. `npm install` first failed on `EBADDEVENGINES` (Node 22.17, needs >=24.18), so I used a checksum-verified portable Node 24.20 and npm 11.18 for this repo only.
 
-**[Date]**
+**2026-10-31**
 
-[Entry]
+Wrote the test first and ran it against the unchanged script: the two-version case exited 0, the rest passed. That run also showed that `bc1c260` is a version 1 lockfile (no `packages` key) which crashes the validator, so I changed the plan's before/after to a trunk copy with an extra entry.
+
+**2026-10-31**
+
+My first version of the check failed on the real trunk lockfile: the existing loop also walks each package's `dependencies` field, which holds range strings, so `caniuse-lite` appeared with an undefined version. I now count only entries with a string `version` and added a test for it. The husky pre-commit hook rejected the first test commit (it ran under Node 22), then rejected a new `.js` file because new files in `tools/validation` must be TypeScript; I renamed it to `.ts` and did not skip the hook.
+
+**2026-10-31**
+
+Ran the ship-gate. The first run was cut off at whole-repo `lint:js`, which did not finish in over 15 minutes, so the row became `npm run lint:js <file>` (AGENTS.md) and the whole-repo run went to the excluded table. The second run passed the four checks and stopped because `check_gate.py` couldn't launch `claude`; I fixed that with `shutil.which`. The third run passed. Opened PR #86097 on WordPress/gutenberg and fixed two loosely worded lines in its body that the gate's voice notes pointed at.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: `plan.md` with its Deviations list, git with the repo's husky pre-commit hook (format and `lint-js` on staged files), and Claude Code to write and run the code.
+- What it produced: three commits, each message saying what it does, and four dated deviations written down as they happened.
+- Difficulties: the hook ran under the wrong Node on my first commit, and it enforced TypeScript for new test files; the plan's step 1 (wait for a maintainer) and its before/after on `bc1c260` both turned out wrong.
+- What changed: the plan, the story's Solution Approach and the PR description all carry the deviations, and the test is `.ts`.
 
 ---
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when opened]
+**PR Link:** https://github.com/WordPress/gutenberg/pull/86097
 
-**PR Description:** [what the PR says; much of the content above
-adapts into it]
+**PR Description:** Related to #33344 (not Closes, so the maintainers decide whether the issue is done). `npm run lint:lockfile` now fails when `package-lock.json` resolves `caniuse-lite` to more than one version, and prints each version with its lockfile paths and the fix. Trunk resolves one version today, so this guards against the duplication coming back; I have not traced why four appeared in 2021. The change is in `tools/validation/validate-package-lock.cjs` (an optional lockfile path argument plus the check) with 5 tests in `validate-package-lock.test.ts`. Evidence in the PR: exit 0 before and exit 1 after on a trunk lockfile copy with an extra entry; `lint:lockfile`, `typecheck` and `lint:js` on the changed files pass. It says I built before a maintainer answered, that I did not run the build, the unit suite or the e2e tests, that the whole-repo `lint:js` did not finish, and that Claude Code helped (the template's AI disclosure).
 
 **Maintainer Feedback:**
 
-- [Date]: [feedback received, or "none yet"; silence is a normal
-  state and costs you nothing]
-- [Date]: [how you addressed it]
+- 2026-10-31: none yet.
 
-**Status:** [Awaiting review / Iterating / Merged / Closed. The
-status is a fact you record, never a grade: the PR is graded as
-opened.]
+**Status:** Awaiting review
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: the ship-gate (my four-check manifest, then pr-precheck on the branch, plan, evidence and description), with the voice guard on the PR text.
+- What it produced: `ship-gate: PASS` on the third run, with all seven pr-precheck checks passing and two voice-guide notes: one claim with no output behind it (the `wp/6.0` to `wp/6.9` counts) and one loose line about the reproduction being mine.
+- Difficulties: the hook was registered as `python3` and the gate launched `claude` directly, so on Windows neither worked until I changed them to `python` and `shutil.which`; the whole-repo lint ran past the gate's limit; and each run costs course credit.
+- What changed: the manifest's lint row is scoped to my two files (the whole-repo run is in the excluded table), both gate scripts are patched, and I fixed the two lines in the PR body after it opened.
 
 ---
 
