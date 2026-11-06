@@ -66,10 +66,9 @@ I extended my voice guide with upstream rules for claims, questions and pings, i
 
 The manifest runs `npm install`, `npm run lint:lockfile`, `npm run lint:js` on my two changed files, and `npm run typecheck`, taken from AGENTS.md and `static-checks.yml`; the whole-repo `lint:js` went in the excluded table because it never finished here. On my branch the gate ended in `ship-gate: PASS` on the third run, with pr-precheck passing all seven checks, and its voice-guide notes made me tighten two claims in the PR text. Four things fought me: the installer wrote the hook as `python3`, which is only a Store stub on this machine, so the hook could never have stopped anything until I changed it to `python`; `check_gate.py` called `claude` directly and couldn't launch the `.cmd` shim until I used `shutil.which`; Gutenberg needs Node 24.18 and the machine had 22.17, so I ran a portable Node 24.20; and the whole-repo lint ran past the gate's per-check limit, so I switched the row to the project's own `npm run lint:js <file>` form.
 
-**Unit 8: [one line on the tool work]**
+**Unit 8: Installed the PR monitor and wrote a Gutenberg playbook with 7- and 14-day nudge thresholds**
 
-[2-4 sentences: the PR-monitor and your playbook. What it read, what it
-drafted, what you did with the draft.]
+I wrote the playbook from five merged Gutenberg PRs by outside contributors (first maintainer response within a day for four, 13 days for one; merges in 1.2 to 13.2 days), which gave a 7-day threshold for a first review and 14 days after I reply. The monitor's one full run, on 2026-11-06, read my PR and drafted no reply: "Nothing is unanswered, so send nothing and wait", because my answer to manzoorwanijk was already the last comment and I was 5 days into a 14-day threshold. I checked that against the thread and it was right, and the mistake was mine and Claude Code's: working with me, it told me twice that the question was still unanswered, and the monitor's draft is what showed it wasn't, so I posted nothing. What fell short: `--state` kept the label FEEDBACK-IN after I had replied, it counted 2 failing checks without naming them (I found one, the missing `[Type]` label), and the install needed two Windows fixes (launching `claude` through `shutil.which`, and reading `gh` output as UTF-8). I haven't rewritten a playbook rule yet, so the next change waits for a real maintainer reply.
 
 ---
 
@@ -231,9 +230,6 @@ The diagnosis is that the repo's lockfile check cannot see a second `caniuse-lit
 
 ## Implementation Notes
 
-[A running log, added to as you work. Date each entry. What you
-built, decisions you made when you made them, wrong turns included.]
-
 **2026-10-31**
 
 Made branch `add/caniuse-lite-duplicate-check` (the repo's `[type]/[change]` naming). I started building even though the maintainer had not answered my claim comment, which my plan said to wait for; I recorded that in `plan.md` and the PR says so. `npm install` first failed on `EBADDEVENGINES` (Node 22.17, needs >=24.18), so I used a checksum-verified portable Node 24.20 and npm 11.18 for this repo only.
@@ -249,6 +245,14 @@ My first version of the check failed on the real trunk lockfile: the existing lo
 **2026-10-31**
 
 Ran the ship-gate. The first run was cut off at whole-repo `lint:js`, which did not finish in over 15 minutes, so the row became `npm run lint:js <file>` (AGENTS.md) and the whole-repo run went to the excluded table. The second run passed the four checks and stopped because `check_gate.py` couldn't launch `claude`; I fixed that with `shutil.which`. The third run passed. Opened PR #86097 on WordPress/gutenberg and fixed two loosely worded lines in its body that the gate's voice notes pointed at.
+
+**2026-11-01** (GitHub shows UTC; the PR opened the evening of 2026-10-31 here)
+
+manzoorwanijk asked whether the issue can still be reproduced, since the monorepo now uses one version of every dependency, and a bot flagged the missing `[Type]` label. I re-checked current trunk (`dec5dbca18`: one `caniuse-lite`, 1.0.30001810) and the repo's `syncpack.config.mjs` ("All dependencies must use the same version across the repo", run by `lint:deps`), then answered no, said why the guard still covers a gap (syncpack reads `package.json`, not the lockfile), and offered to close. I tried to add `[Type] Build Tooling` myself and got a permissions error, so I left the label to a maintainer.
+
+**2026-11-06**
+
+Installed the PR monitor, patched two Windows problems in my installed copy, wrote the playbook, and ran it once. It drafted a wait note, not a reply, and I agreed with it. I had wrongly believed the question was unanswered, so I corrected that before writing this section. No human has commented since 2026-11-01.
 
 **Toolkit**
 
@@ -267,9 +271,11 @@ Ran the ship-gate. The first run was cut off at whole-repo `lint:js`, which did 
 
 **Maintainer Feedback:**
 
-- 2026-10-31: none yet.
+- 2026-11-01: manzoorwanijk asked whether the issue can still be reproduced, now that the monorepo uses one version of every dependency. A bot also flagged that the PR has no `[Type]` label, which my account can't add.
+- 2026-11-01: I answered the same night: no, one `caniuse-lite` (1.0.30001810) on trunk `dec5dbca18`; four versions only at `bc1c260` and `wp/5.7`; the syncpack rule keeps direct dependencies in step but doesn't read the lockfile, so the PR is only a guard; I offered to close it if they don't want that check.
+- 2026-11-06: no human reply since, 5 days into my 14-day nudge threshold; the type label is still missing.
 
-**Status:** Awaiting review
+**Status:** Awaiting review (waiting on the maintainer)
 
 **Toolkit**
 
@@ -284,25 +290,23 @@ Ran the ship-gate. The first run was cut off at whole-repo `lint:js`, which did 
 
 **Technical Skills Gained**
 
-[What you learned technically, named concretely.]
+I learned how npm lockfiles differ by `lockfileVersion`: version 1 nests everything under `dependencies`, while version 3 keys a flat `packages` map by path, which is why the validator crashes on the issue's own commit. I wrote a Node validator change and a vitest test that runs it against temporary lockfiles, and I learned that a version 3 package's `dependencies` field holds range strings, which broke my first version on the real lockfile. I also learned Gutenberg's tooling: `engines` and `devEngines` pinning Node, husky and lint-staged running on commit, the rule that new files in `tools/validation` must be TypeScript, and syncpack's one-version-per-dependency rule. On Windows I learned that `.cmd` shims need `shutil.which` and that subprocess output needs explicit UTF-8.
 
 **Challenges Overcome**
 
-[What was hard and how you solved it; point at the real events, the
-Toolkit blocks above are full of them.]
+The hardest part was that the bug had already gone away: trunk resolves one `caniuse-lite`, so I built a guard instead of a fix, and the maintainer's first question was whether I could reproduce it at all. Smaller walls came in a row: Node 22 against a Node 24 requirement (solved with a checksum-checked portable Node), a whole-repo `lint:js` that never finished (solved by the project's own `npm run lint:js <file>` form, with the whole-repo run in my excluded table), a plan whose before/after pointed at an unreadable version 1 lockfile, and two gate and monitor scripts that didn't work on Windows until patched. Each is in the Implementation Notes with the fix.
 
 **What I'd Do Differently Next Time**
 
-[Reflection on your process.]
+I would wait for the maintainer's answer before writing code, since my plan said to and the answer turned out to be "this may not be needed". I would also build test fixtures from the real file's shape instead of from my idea of it, which would have caught the range-string bug before the first commit, and I would re-read the live PR thread before telling myself what was outstanding, because I got that wrong twice and the monitor had it right.
 
 ---
 
 ## Resources Used
 
-[What actually helped, not a reading list. List things this story
-already shows you using: the doc you followed to set the environment
-up, the thread that explained the bug, the person who answered you.
-One real entry beats ten plausible ones.]
-
-- [Link to documentation that helped]
-- [Discussion, issue, or post that helped]
+- [WordPress/gutenberg#33344](https://github.com/WordPress/gutenberg/issues/33344): the issue thread, including the 2025 comments from Mamaduka (close it) and kraftner (consistency matters for CSS builds) that shaped what the guard should be.
+- [AGENTS.md](https://github.com/WordPress/gutenberg/blob/trunk/AGENTS.md): line 93 named `npm run lint:js <file>`, which made the gate runnable.
+- [docs/contributors/code/git-workflow.md](https://github.com/WordPress/gutenberg/blob/trunk/docs/contributors/code/git-workflow.md): the `[type]/[change]` branch naming.
+- [syncpack.config.mjs](https://github.com/WordPress/gutenberg/blob/trunk/syncpack.config.mjs): the rule behind manzoorwanijk's question.
+- [tools/validation/validate-tsconfig.test.js](https://github.com/WordPress/gutenberg/blob/trunk/tools/validation/validate-tsconfig.test.js): the pattern I copied for running a validator against temporary fixtures.
+- [PR #86097](https://github.com/WordPress/gutenberg/pull/86097): manzoorwanijk's question, which is what moved the PR from "guard" to "is this needed".
